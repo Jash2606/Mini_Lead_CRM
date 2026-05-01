@@ -1,0 +1,544 @@
+{
+  "info": {
+    "name": "Mini Lead CRM API",
+    "description": "Complete API collection for the Mini Lead CRM — Superleap Backend Intern Assessment.\n\n**Base URL:** `http://localhost:3000`\n\n**API Version prefix:** `/v1` — all endpoints are under `/v1`.\n\n**Status Machine:**\n```\nNEW → CONTACTED → QUALIFIED → CONVERTED\n        ↘ LOST     ↘ LOST     ↘ LOST\nNEW ↘ LOST\n```\nCONVERTED and LOST are terminal states.\n\n**Setup:**\n1. `docker-compose up --build`\n2. `docker-compose exec app node seeds/seedLeads.js`\n3. Import this collection and set `baseUrl` variable to `http://localhost:3000`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "leadId", "value": "", "type": "string", "description": "Auto-set by 'Create Lead' request" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/v1/health", "host": ["{{baseUrl}}"], "path": ["v1", "health"] },
+            "description": "Returns `{\"status\":\"ok\"}` when the server is running."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"status\":\"ok\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Level 1 — Core CRUD",
+      "item": [
+        {
+          "name": "Create Lead",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('leadId', body.id);",
+                  "  pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "  pm.test('Has id', () => pm.expect(body.id).to.be.a('string'));",
+                  "  pm.test('Status is NEW', () => pm.expect(body.status).to.eql('NEW'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads", "host": ["{{baseUrl}}"], "path": ["v1", "leads"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aman Gupta\",\n  \"email\": \"aman_{{$timestamp}}@example.com\",\n  \"phone\": \"+91-9876543210\",\n  \"source\": \"website\"\n}"
+            },
+            "description": "Creates a new lead. `name` and `email` are required. Default status is `NEW`. Email is stored lowercase and must be unique."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"name\": \"Aman Gupta\",\n  \"email\": \"aman@example.com\",\n  \"phone\": \"+91-9876543210\",\n  \"status\": \"NEW\",\n  \"source\": \"website\",\n  \"created_at\": \"2026-04-30T12:00:00.000Z\",\n  \"updated_at\": \"2026-04-30T12:00:00.000Z\"\n}"
+            },
+            {
+              "name": "422 Missing name",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"name is required\"\n}"
+            },
+            {
+              "name": "422 Invalid email",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"email must be a valid email address\"\n}"
+            },
+            {
+              "name": "409 Duplicate email",
+              "status": "Conflict",
+              "code": 409,
+              "body": "{\n  \"error\": \"A lead with this email already exists\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List All Leads",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/v1/leads", "host": ["{{baseUrl}}"], "path": ["v1", "leads"] },
+            "description": "Returns all leads ordered by `created_at DESC`. Optionally filter by `?status=NEW|CONTACTED|QUALIFIED|CONVERTED|LOST`."
+          },
+          "response": [
+            {
+              "name": "200 OK — All leads",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  {\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"name\": \"Aman Gupta\",\n    \"email\": \"aman@example.com\",\n    \"phone\": \"+91-9876543210\",\n    \"status\": \"NEW\",\n    \"source\": \"website\",\n    \"created_at\": \"2026-04-30T12:00:00.000Z\",\n    \"updated_at\": \"2026-04-30T12:00:00.000Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "List Leads — Filter by Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('All have status NEW', () => body.forEach(l => pm.expect(l.status).to.eql('NEW')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads?status=NEW",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"],
+              "query": [{ "key": "status", "value": "NEW", "description": "One of: NEW, CONTACTED, QUALIFIED, CONVERTED, LOST" }]
+            },
+            "description": "Filter leads by status. Case-insensitive. Returns 400 for invalid status values."
+          },
+          "response": [
+            {
+              "name": "400 Invalid status",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"Invalid status filter. Must be one of: NEW, CONTACTED, QUALIFIED, CONVERTED, LOST\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Lead by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has id', () => pm.expect(pm.response.json().id).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/{{leadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "{{leadId}}"]
+            },
+            "description": "Fetch a single lead by UUID. Response is cached in Redis for 1 hour (TTL). Cache is invalidated on update/delete."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"name\": \"Aman Gupta\",\n  \"email\": \"aman@example.com\",\n  \"phone\": \"+91-9876543210\",\n  \"status\": \"NEW\",\n  \"source\": \"website\",\n  \"created_at\": \"2026-04-30T12:00:00.000Z\",\n  \"updated_at\": \"2026-04-30T12:00:00.000Z\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Lead not found\"\n}"
+            },
+            {
+              "name": "400 Invalid UUID",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"Invalid ID format — must be a valid UUID\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Lead",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Name updated', () => pm.expect(pm.response.json().name).to.eql('Updated Name'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/{{leadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "{{leadId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"+91-9999999999\",\n  \"source\": \"referral\"\n}"
+            },
+            "description": "Update any of: `name`, `email`, `phone`, `source`. At least one field must be provided. Status cannot be changed here — use PATCH /v1/leads/:id/status. Cache is invalidated."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"name\": \"Updated Name\",\n  \"email\": \"aman@example.com\",\n  \"phone\": \"+91-9999999999\",\n  \"status\": \"NEW\",\n  \"source\": \"referral\",\n  \"created_at\": \"2026-04-30T12:00:00.000Z\",\n  \"updated_at\": \"2026-04-30T13:00:00.000Z\"\n}"
+            },
+            {
+              "name": "400 Empty body",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"No valid fields provided to update\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Lead not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Lead",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/{{leadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "{{leadId}}"]
+            },
+            "description": "Permanently deletes a lead. Redis cache entry is also deleted. Returns 404 if not found."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Lead deleted successfully\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Lead not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Status — NEW → CONTACTED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is CONTACTED', () => pm.expect(pm.response.json().status).to.eql('CONTACTED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/{{leadId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "{{leadId}}", "status"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONTACTED\"\n}" },
+            "description": "Transitions lead status following the state machine rules:\n- NEW → CONTACTED, LOST\n- CONTACTED → QUALIFIED, LOST\n- QUALIFIED → CONVERTED, LOST\n- CONVERTED → terminal (no transitions)\n- LOST → terminal (no transitions)\n\nInput is case-insensitive. Returns 400 for invalid transitions or terminal states."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"name\": \"Aman Gupta\",\n  \"email\": \"aman@example.com\",\n  \"status\": \"CONTACTED\",\n  \"updated_at\": \"2026-04-30T13:00:00.000Z\"\n}"
+            },
+            {
+              "name": "400 Invalid transition",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"Invalid status transition from NEW to CONVERTED\"\n}"
+            },
+            {
+              "name": "400 Terminal state",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"Cannot transition from terminal status CONVERTED\"\n}"
+            },
+            {
+              "name": "422 Missing status",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"status is required\"\n}"
+            },
+            {
+              "name": "422 Invalid status value",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"status must be one of: NEW, CONTACTED, QUALIFIED, CONVERTED, LOST\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Status — CONTACTED → QUALIFIED",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads/{{leadId}}/status", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "{{leadId}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"QUALIFIED\"\n}" },
+            "description": "Valid transition from CONTACTED to QUALIFIED."
+          }
+        },
+        {
+          "name": "Update Status — QUALIFIED → CONVERTED",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads/{{leadId}}/status", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "{{leadId}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONVERTED\"\n}" },
+            "description": "Valid transition from QUALIFIED to CONVERTED (terminal)."
+          }
+        },
+        {
+          "name": "Update Status — Any → LOST",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads/{{leadId}}/status", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "{{leadId}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"LOST\"\n}" },
+            "description": "LOST is reachable from NEW, CONTACTED, or QUALIFIED. It is a terminal state."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Level 2 — Bulk Operations",
+      "item": [
+        {
+          "name": "Bulk Create Leads",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 207', () => pm.response.to.have.status(207));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has total/successful/failed/results', () => {",
+                  "  pm.expect(b).to.have.all.keys('total','successful','failed','results');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads/bulk", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"name\": \"Lead Alpha\",\n    \"email\": \"alpha_{{$timestamp}}@example.com\",\n    \"source\": \"website\"\n  },\n  {\n    \"name\": \"Lead Beta\",\n    \"email\": \"beta_{{$timestamp}}@example.com\",\n    \"phone\": \"+91-9000000001\"\n  },\n  {\n    \"email\": \"missing-name@example.com\"\n  }\n]"
+            },
+            "description": "Create multiple leads in one request. Always returns `207 Multi-Status`. Each result has `index`, `success`, and either `lead` or `error`. A failed record does NOT stop others from being created."
+          },
+          "response": [
+            {
+              "name": "207 Multi-Status (partial success)",
+              "status": "Multi-Status",
+              "code": 207,
+              "body": "{\n  \"total\": 3,\n  \"successful\": 2,\n  \"failed\": 1,\n  \"results\": [\n    {\n      \"index\": 0,\n      \"success\": true,\n      \"lead\": {\n        \"id\": \"uuid-1\",\n        \"name\": \"Lead Alpha\",\n        \"email\": \"alpha@example.com\",\n        \"status\": \"NEW\"\n      }\n    },\n    {\n      \"index\": 1,\n      \"success\": true,\n      \"lead\": { \"id\": \"uuid-2\", \"name\": \"Lead Beta\", \"email\": \"beta@example.com\", \"status\": \"NEW\" }\n    },\n    {\n      \"index\": 2,\n      \"success\": false,\n      \"error\": \"name is required\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "422 Not an array",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"Invalid input: expected array, received object\"\n}"
+            },
+            {
+              "name": "422 Empty array",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"Request body must be a non-empty array\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Bulk Update Leads",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 207', () => pm.response.to.have.status(207));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has results array', () => pm.expect(b.results).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads/bulk", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"id\": \"{{leadId}}\",\n    \"name\": \"Bulk Updated Name\",\n    \"source\": \"campaign\"\n  },\n  {\n    \"id\": \"00000000-0000-0000-0000-000000000000\",\n    \"name\": \"This will fail\"\n  }\n]"
+            },
+            "description": "Update multiple leads in one request. Each item must include `id`. Always returns `207 Multi-Status`. A missing or non-existent `id` is reported as a per-record failure. Cache is invalidated for each successfully updated lead."
+          },
+          "response": [
+            {
+              "name": "207 Multi-Status",
+              "status": "Multi-Status",
+              "code": 207,
+              "body": "{\n  \"total\": 2,\n  \"successful\": 1,\n  \"failed\": 1,\n  \"results\": [\n    {\n      \"index\": 0,\n      \"id\": \"valid-uuid\",\n      \"success\": true,\n      \"lead\": { \"id\": \"valid-uuid\", \"name\": \"Bulk Updated Name\" }\n    },\n    {\n      \"index\": 1,\n      \"id\": \"00000000-0000-0000-0000-000000000000\",\n      \"success\": false,\n      \"error\": \"Lead not found\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "422 Not an array",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "body": "{\n  \"error\": \"Invalid input: expected array, received object\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Level 3 — Cache Verification",
+      "item": [
+        {
+          "name": "Get Lead (1st — DB hit)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/v1/leads/{{leadId}}", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "{{leadId}}"] },
+            "description": "First request — fetches from PostgreSQL and stores in Redis with key `lead:<id>` (TTL: 1 hour)."
+          }
+        },
+        {
+          "name": "Get Lead (2nd — Cache hit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 50ms (cache)', () => pm.expect(pm.response.responseTime).to.be.below(50));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/v1/leads/{{leadId}}", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "{{leadId}}"] },
+            "description": "Second request — served from Redis cache. Significantly faster response time."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Cases",
+      "item": [
+        {
+          "name": "404 — Lead Not Found",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/v1/leads/00000000-0000-0000-0000-000000000000", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "00000000-0000-0000-0000-000000000000"] },
+            "description": "A valid UUID that doesn't exist in the database returns 404."
+          },
+          "response": [
+            { "name": "404", "status": "Not Found", "code": 404, "body": "{\n  \"error\": \"Lead not found\"\n}" }
+          ]
+        },
+        {
+          "name": "400 — Invalid UUID in URL",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/v1/leads/not-a-uuid", "host": ["{{baseUrl}}"], "path": ["v1", "leads", "not-a-uuid"] },
+            "description": "Any non-UUID value in /:id returns 400. This also applies to GET /v1/leads/bulk which falls through to this route."
+          },
+          "response": [
+            { "name": "400", "status": "Bad Request", "code": 400, "body": "{\n  \"error\": \"Invalid ID format — must be a valid UUID\"\n}" }
+          ]
+        },
+        {
+          "name": "409 — Duplicate Email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads", "host": ["{{baseUrl}}"], "path": ["v1", "leads"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Duplicate\",\n  \"email\": \"aman@example.com\"\n}" },
+            "description": "Email uniqueness is enforced at the DB level (UNIQUE constraint). Returns 409."
+          },
+          "response": [
+            { "name": "409", "status": "Conflict", "code": 409, "body": "{\n  \"error\": \"A lead with this email already exists\"\n}" }
+          ]
+        },
+        {
+          "name": "422 — Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1/leads", "host": ["{{baseUrl}}"], "path": ["v1", "leads"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"No Email\"\n}" },
+            "description": "Returns 422 with a human-readable error for missing or invalid fields."
+          },
+          "response": [
+            { "name": "422", "status": "Unprocessable Entity", "code": 422, "body": "{\n  \"error\": \"email is required\"\n}" }
+          ]
+        }
+      ]
+    }
+  ]
+}
