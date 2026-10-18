@@ -1,5 +1,4 @@
-# Creates the database table. Runs after install/upgrade (not before),
-# because the database must already exist when this job starts.
+# creates the database table, runs after install/upgrade so postgres already exists
 apiVersion: batch/v1
 kind: Job
 metadata:

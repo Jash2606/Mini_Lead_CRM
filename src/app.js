@@ -22,12 +22,10 @@ app.use('/v1/leads', rateLimit({ windowMs: 60 * 1000, limit: 300 }));
 
 app.get('/v1/health', (req, res) => res.json({ status: 'ok' }));
 
-// alive = the process is running. Does not check the database on purpose,
-// otherwise a database problem would make kubernetes restart the app.
+// alive = the process is running (no database check, so a db problem does not restart the app)
 app.get('/health/live', (req, res) => res.json({ status: 'alive' }));
 
-// ready = the pod can get traffic. Postgres is required.
-// Redis is only a cache, the app still works without it.
+// ready = can get traffic (postgres is required, redis is only a cache)
 app.get('/health/ready', async (req, res) => {
   if (shutdownState.isShuttingDown) {
     return res.status(503).json({ status: 'shutting down' });

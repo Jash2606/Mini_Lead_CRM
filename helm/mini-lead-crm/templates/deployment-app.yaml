@@ -24,6 +24,8 @@ spec:
         runAsNonRoot: true
         # 1000 is the "node" user inside the image
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -57,3 +59,9 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+          # the app only needs to read its own files, so lock the container down
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

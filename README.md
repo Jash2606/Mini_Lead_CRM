@@ -146,14 +146,22 @@ kind delete cluster --name mini-lead-crm
 
 ## CI/CD
 
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every push/PR: installs dependencies, runs the full migration + unit + integration suite against real Postgres/Redis service containers, audits production dependencies (`npm audit`), and lints the Helm chart (`helm lint`). On a push, a second job builds the Docker image and pushes it to `ghcr.io` tagged with both `latest` and the commit SHA — so the exact image running anywhere is traceable back to the commit that built it. No registry secrets are needed; it authenticates with the built-in `GITHUB_TOKEN`.
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every push and has three jobs:
+
+1. **test** (also runs on pull requests): installs dependencies, runs the migration and the unit + integration tests against a real Postgres, audits production dependencies (`npm audit`), and lints the Helm chart (`helm lint`).
+2. **build-and-push**: builds the Docker image, scans it with Trivy (fails if a critical or high vulnerability with a fix is found), and only then pushes it to `ghcr.io` tagged with the commit SHA and `latest`.
+3. **deploy** (automatic): creates a fresh `kind` cluster inside the runner, pulls the exact image that was just pushed, installs the Helm chart with it, and runs a smoke test (readiness check, create a lead, read it back, `/metrics`). If the deploy or the smoke test fails, the pipeline fails.
+
+The image tag is the commit SHA, so the running version can be traced back to the commit that built it. No registry secrets are needed, the workflow uses the built-in `GITHUB_TOKEN`. To deploy to your own local cluster use `./deploy.sh`.
 
 ---
 
 ## Security
 
 - **Secrets:** no credentials are committed anywhere. Local dev reads `DB_PASSWORD` etc. from a gitignored `.env`; the Helm chart's `db.password` has no default and fails the install loudly (via `required`) if not supplied via `--set`/`-f`, and is stored as a Kubernetes `Secret`, not a plaintext env var in the Deployment spec.
-- **Containers:** the image runs as the non-root `node` user (the Helm chart also sets `runAsNonRoot`), installs only production packages (`npm ci --omit=dev`), and `.dockerignore` keeps `.env`, `.git` and tests out of the image.
+- **Containers:** the image runs as the non-root `node` user, installs only production packages (`npm ci --omit=dev`), has npm removed (it is only needed to install), gets the latest system security fixes (`apk upgrade`), and `.dockerignore` keeps `.env`, `.git` and tests out of the image.
+- **Image scan:** CI scans every image with Trivy and does not push it if a critical or high vulnerability with a fix exists.
+- **Kubernetes:** the app pods run as non-root (`runAsNonRoot`, uid 1000), with a read-only filesystem, no privilege escalation, all Linux capabilities dropped and the default seccomp profile.
 - **HTTP:** `helmet()` sets standard security headers; `express-rate-limit` allows at most 300 requests per minute per IP on `/v1/leads`.
 - **Dependencies:** `npm audit --omit=dev --audit-level=critical` runs in CI; the one critical production vulnerability found during this work (`proxy-addr`, via Express) has been fixed.
 
@@ -163,7 +171,7 @@ kind delete cluster --name mini-lead-crm
 
 - **No tracing.** Metrics (`/metrics`) and JSON logs with request ids are in place, but there is no distributed tracing (for example OpenTelemetry). With one service and one database there is little to trace across. It makes sense once there are more services.
 - **Postgres is a single pod.** No replication or failover. A managed database would replace it in production.
-- **Deploying is manual.** CI tests the code and pushes the image to ghcr.io, but deploying to the local kind cluster is done by running `./deploy.sh`, because there is no remote cluster.
+- **The automatic deploy goes to a temporary cluster.** The CI deploy job installs into a kind cluster that is thrown away after the run (no remote cluster is available), so it proves the release works but does not update a long-running environment. For a local cluster, run `./deploy.sh`.
 - **Readiness does not check migrations.** `/health/ready` only checks that Postgres is reachable. The migration job normally finishes a few seconds after install.
 - **No network policy** between the pods.
 - **The kind node image is pinned to Kubernetes 1.29**, because the newest one does not start on machines that use cgroup v1.

@@ -53,11 +53,71 @@ jobs:
       - uses: actions/checkout@v4
       - name: Login to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Build and push the image
+      - name: Build the image
         run: |
           # image names must be lowercase
           IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
           # the commit id as tag shows which commit built the image
           docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+      # fails (so nothing is pushed) if a critical or high vulnerability has a fix
+      - name: Scan the image for vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image \
+            --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 $IMAGE:${{ github.sha }}
+      - name: Push the image
+        run: |
           docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
+
+  # installs the new image into a fresh kind cluster and tests it
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create a kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ci
+
+      - name: Pull the image that CI built
+        run: |
+          IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull $IMAGE:${{ github.sha }}
+          # the cluster cannot pull private images, so load it in
+          kind load docker-image $IMAGE:${{ github.sha }} --name ci
+
+      - name: Deploy with Helm
+        run: |
+          # the cluster is thrown away after the run, so a random password is fine
+          DB_PASSWORD=$(openssl rand -hex 12)
+          echo "::add-mask::$DB_PASSWORD"
+          helm upgrade --install mini-lead-crm ./helm/mini-lead-crm \
+            --set image.repository=$IMAGE \
+            --set image.tag=${{ github.sha }} \
+            --set db.password=$DB_PASSWORD \
+            --wait --timeout 4m
+
+      - name: Smoke test
+        run: |
+          kubectl get pods
+          echo "running image: $(kubectl get deploy mini-lead-crm-app -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          kubectl port-forward svc/mini-lead-crm-app 3000:3000 &
+          sleep 5
+          curl -sf localhost:3000/health/ready
+          ID=$(curl -sf -X POST localhost:3000/v1/leads -H "Content-Type: application/json" -d '{"name":"CI Test","email":"ci-test@example.com"}' | jq -r .id)
+          curl -sf localhost:3000/v1/leads/$ID
+          curl -sf localhost:3000/metrics | grep http_request_duration_seconds_count
+
+      - name: Show logs if something failed
+        if: failure()
+        run: |
+          kubectl get pods
+          kubectl logs deploy/mini-lead-crm-app --tail=50

@@ -1,5 +1,4 @@
-# StatefulSet (not Deployment) so the database keeps its own disk
-# even when the pod is deleted and created again.
+# StatefulSet so the database keeps its disk when the pod is recreated
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
