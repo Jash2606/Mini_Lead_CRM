@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mini-lead-crm
+description: Mini Lead CRM — Helm chart for local Kubernetes (kind/minikube)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
