@@ -5,6 +5,9 @@ const pinoHttp = require('pino-http');
 const leadRoutes = require('./routes/leadRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./config/logger');
+const db = require('./config/database');
+const cache = require('./config/redis');
+const shutdownState = require('./config/shutdownState');
 
 const app = express();
 
@@ -16,6 +19,35 @@ app.use(express.json());
 app.use('/v1/leads', rateLimit({ windowMs: 60 * 1000, limit: 300 }));
 
 app.get('/v1/health', (req, res) => res.json({ status: 'ok' }));
+
+// alive = the process is running. Does not check the database on purpose,
+// otherwise a database problem would make kubernetes restart the app.
+app.get('/health/live', (req, res) => res.json({ status: 'alive' }));
+
+// ready = the pod can get traffic. Postgres is required.
+// Redis is only a cache, the app still works without it.
+app.get('/health/ready', async (req, res) => {
+  if (shutdownState.isShuttingDown) {
+    return res.status(503).json({ status: 'shutting down' });
+  }
+
+  const checks = { postgres: 'ok', redis: 'ok' };
+
+  try {
+    await db.checkConnection();
+  } catch (err) {
+    checks.postgres = 'down';
+  }
+
+  try {
+    await cache.checkConnection();
+  } catch (err) {
+    checks.redis = 'down';
+  }
+
+  const ready = checks.postgres === 'ok';
+  res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not ready', checks });
+});
 
 app.use('/v1/leads', leadRoutes);
 
