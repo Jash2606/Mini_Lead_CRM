@@ -1,11 +1,12 @@
 const express = require('express');
-const morgan = require('morgan');
+const pinoHttp = require('pino-http');
 const leadRoutes = require('./routes/leadRoutes');
 const errorHandler = require('./middleware/errorHandler');
+const logger = require('./config/logger');
 
 const app = express();
 
-app.use(morgan('dev'));
+app.use(pinoHttp({ logger })); // logs every request as json
 app.use(express.json());
 
 app.get('/v1/health', (req, res) => res.json({ status: 'ok' }));
