@@ -8,11 +8,13 @@ const logger = require('./config/logger');
 const db = require('./config/database');
 const cache = require('./config/redis');
 const shutdownState = require('./config/shutdownState');
+const { client, metricsMiddleware } = require('./config/metrics');
 
 const app = express();
 
 app.use(helmet()); // safe default http headers
 app.use(pinoHttp({ logger })); // logs every request as json
+app.use(metricsMiddleware);
 app.use(express.json());
 
 // max 300 requests per minute from one ip
@@ -47,6 +49,12 @@ app.get('/health/ready', async (req, res) => {
 
   const ready = checks.postgres === 'ok';
   res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not ready', checks });
+});
+
+// metrics for prometheus
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
 });
 
 app.use('/v1/leads', leadRoutes);
