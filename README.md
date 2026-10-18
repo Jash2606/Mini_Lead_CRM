@@ -123,7 +123,7 @@ cp .env.example .env   # if you haven't already
 ./deploy.sh
 ```
 
-This builds the image, creates the `mini-lead-crm` kind cluster if it doesn't exist, loads the image directly into it (no registry involved, kind can't pull local images), and runs `helm upgrade --install`. The chart deploys: a 2-replica app `Deployment` (readiness/liveness probes, rolling updates), a Postgres `StatefulSet` with a persistent volume, a Redis `Deployment`, and a `Job` (Helm post-install/post-upgrade hook) that runs the idempotent migration script once.
+This builds the image (tagged with the current git commit id, so you can see which commit is running with `kubectl get deploy mini-lead-crm-app -o jsonpath='{.spec.template.spec.containers[0].image}'`), creates the `mini-lead-crm` kind cluster if it doesn't exist, loads the image directly into it (no registry involved, kind can't pull local images), and runs `helm upgrade --install`. The chart deploys: a 2-replica app `Deployment` (readiness/liveness probes, rolling updates), a Postgres `StatefulSet` with a persistent volume, a Redis `Deployment`, and a `Job` (Helm post-install/post-upgrade hook) that runs the idempotent migration script once.
 
 ```bash
 # Watch it come up
@@ -156,6 +156,17 @@ kind delete cluster --name mini-lead-crm
 - **Containers:** the image runs as the non-root `node` user (the Helm chart also sets `runAsNonRoot`), installs only production packages (`npm ci --omit=dev`), and `.dockerignore` keeps `.env`, `.git` and tests out of the image.
 - **HTTP:** `helmet()` sets standard security headers; `express-rate-limit` allows at most 300 requests per minute per IP on `/v1/leads`.
 - **Dependencies:** `npm audit --omit=dev --audit-level=critical` runs in CI; the one critical production vulnerability found during this work (`proxy-addr`, via Express) has been fixed.
+
+---
+
+## Known limitations
+
+- **No tracing.** Metrics (`/metrics`) and JSON logs with request ids are in place, but there is no distributed tracing (for example OpenTelemetry). With one service and one database there is little to trace across. It makes sense once there are more services.
+- **Postgres is a single pod.** No replication or failover. A managed database would replace it in production.
+- **Deploying is manual.** CI tests the code and pushes the image to ghcr.io, but deploying to the local kind cluster is done by running `./deploy.sh`, because there is no remote cluster.
+- **Readiness does not check migrations.** `/health/ready` only checks that Postgres is reachable. The migration job normally finishes a few seconds after install.
+- **No network policy** between the pods.
+- **The kind node image is pinned to Kubernetes 1.29**, because the newest one does not start on machines that use cgroup v1.
 
 ---
 
