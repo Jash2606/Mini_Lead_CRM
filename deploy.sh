@@ -23,7 +23,9 @@ fi
 # kind cannot see local docker images, so we load it in
 kind load docker-image $IMAGE --name $CLUSTER
 
+# --force-conflicts: the chart wins over manual kubectl changes (fixes drift)
 helm upgrade --install mini-lead-crm ./helm/mini-lead-crm \
+  --force-conflicts \
   --set image.tag=$TAG \
   --set db.user="$DB_USER" \
   --set db.password="$DB_PASSWORD" \
