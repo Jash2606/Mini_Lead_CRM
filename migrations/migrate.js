@@ -15,7 +15,24 @@ const migrate = async () => {
         updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
     `);
-    console.log('Migration completed: leads table created');
+
+    // only allow valid statuses in the database too (not just in the app code)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'leads_status_check'
+        ) THEN
+          ALTER TABLE leads ADD CONSTRAINT leads_status_check
+            CHECK (status IN ('NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'));
+        END IF;
+      END $$;
+    `);
+
+    // makes filtering leads by status faster
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);`);
+
+    console.log('Migration completed: leads table ready (table, status CHECK constraint, status index)');
     process.exit(0);
   } catch (err) {
     console.error('Migration failed:', err);

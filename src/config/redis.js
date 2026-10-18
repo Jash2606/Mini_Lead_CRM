@@ -53,4 +53,21 @@ const del = async (key) => {
   }
 };
 
-module.exports = { connect, get, set, del };
+// used by the readiness check
+const checkConnection = async () => {
+  if (!isConnected || !client) throw new Error('redis not connected');
+  await client.ping();
+};
+
+// used when the app shuts down
+const shutdown = async () => {
+  if (!client) return;
+  try {
+    await client.quit();
+  } catch {
+    // redis is already closed, nothing to do
+  }
+  isConnected = false;
+};
+
+module.exports = { connect, get, set, del, checkConnection, shutdown };

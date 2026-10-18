@@ -1,0 +1,13 @@
+image:
+  repository: mini-lead-crm
+  tag: local
+
+replicas: 2
+
+db:
+  name: lead_crm
+  user: postgres
+  # no default on purpose: pass it with --set so it is never committed
+  password: ""
+
+storage: 1Gi

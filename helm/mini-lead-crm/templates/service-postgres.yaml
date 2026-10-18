@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+spec:
+  # headless service: the name points straight to the postgres pod
+  clusterIP: None
+  selector:
+    app: mini-lead-crm
+    component: postgres
+  ports:
+    - port: 5432
+      targetPort: postgres

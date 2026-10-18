@@ -1,0 +1,7 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mini-lead-crm
+nodes:
+  - role: control-plane
+    # older image: the newest one does not start on machines using cgroup v1
+    image: kindest/node:v1.29.2
