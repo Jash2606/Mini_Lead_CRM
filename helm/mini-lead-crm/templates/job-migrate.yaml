@@ -1,0 +1,28 @@
+# Creates the database table. Runs after install/upgrade (not before),
+# because the database must already exist when this job starts.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-migrate
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    # delete the old job first, so upgrades do not fail
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        # wait until postgres accepts connections
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z {{ .Release.Name }}-postgres 5432; do sleep 2; done"]
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["node", "migrations/migrate.js"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-app-config
+            - secretRef:
+                name: {{ .Release.Name }}-db-credentials
