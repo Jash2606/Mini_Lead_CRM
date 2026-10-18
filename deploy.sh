@@ -3,9 +3,12 @@
 set -e
 
 CLUSTER=mini-lead-crm
-IMAGE=mini-lead-crm:local
 
 cd "$(dirname "$0")"
+
+# the image is tagged with the git commit id, so we can see which commit is running
+TAG=$(git rev-parse --short HEAD)
+IMAGE=mini-lead-crm:$TAG
 
 # gets DB_USER and DB_PASSWORD from the .env file (not committed to git)
 source .env
@@ -21,6 +24,7 @@ fi
 kind load docker-image $IMAGE --name $CLUSTER
 
 helm upgrade --install mini-lead-crm ./helm/mini-lead-crm \
+  --set image.tag=$TAG \
   --set db.user="$DB_USER" \
   --set db.password="$DB_PASSWORD" \
   --wait --timeout 3m
